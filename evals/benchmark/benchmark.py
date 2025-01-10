@@ -57,6 +57,8 @@ def extract_test_case_data(content):
         "service_ip": test_suite_config.get("service_ip"),
         "service_port": test_suite_config.get("service_port"),
         "load_shape": test_suite_config.get("load_shape"),
+        "concurrent_level": test_suite_config.get("concurrent_level"),
+        "arrival_rate": test_suite_config.get("arrival_rate"),
         "query_timeout": test_suite_config.get("query_timeout", 120),
         "seed": test_suite_config.get("seed", None),
         "namespace": namespace,
@@ -73,18 +75,10 @@ def create_run_yaml_content(service, base_url, bench_target, test_phase, num_que
     # the parameter will be passed to Locust to launch fixed
     # number of simulated users.
     concurrency = 1
-    try:
-        load_shape = test_params["load_shape"]["name"]
-        load_shape_params = test_params["load_shape"]["params"][load_shape]
-        if load_shape_params and load_shape_params["concurrent_level"]:
-            if num_queries >= 0:
-                concurrency = max(1, num_queries // load_shape_params["concurrent_level"])
-            else:
-                concurrency = load_shape_params["concurrent_level"]
-    except KeyError as e:
-        # If the concurrent_level is not specified, load shapes should
-        # manage concurrency and user spawn rate by themselves.
-        pass
+    if num_queries >= 0:
+        concurrency = max(1, num_queries // test_params["concurrent_level"])
+    else:
+        concurrency = test_params["concurrent_level"]
 
     yaml_content = {
         "profile": {
@@ -319,6 +313,8 @@ def run_benchmark(report=False):
         "service_port": parsed_data["service_port"],
         "test_output_dir": parsed_data["test_output_dir"],
         "load_shape": parsed_data["load_shape"],
+        "concurrent_level": parsed_data["concurrent_level"],
+        "arrival_rate": parsed_data["arrival_rate"],
         "query_timeout": parsed_data["query_timeout"],
         "warm_ups": parsed_data["warm_ups"],
         "seed": parsed_data["seed"],
@@ -346,14 +342,13 @@ def run_benchmark(report=False):
     }
 
     all_output_folders = []
-    # Process each example's services
-    for example in parsed_data["examples"]:
-        case_data = parsed_data["all_case_data"].get(example, {})
-        service_types = example_service_map.get(example, [])
-        for service_type in service_types:
-            output_folder = process_service(example, service_type, case_data, test_suite_config)
-            if output_folder is not None:
-                all_output_folders.append(output_folder)
+
+    case_data = yaml_content.get("test_cases", {})
+    service_types = example_service_map.get(parsed_data["example_name"], [])
+    for service_type in service_types:
+        output_folder = process_service(parsed_data["example_name"], service_type, case_data, test_suite_config)
+        if output_folder is not None:
+            all_output_folders.append(output_folder)
 
     if report:
         print(all_output_folders)
